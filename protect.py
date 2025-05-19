@@ -118,8 +118,10 @@ def create_image_thumbnail(image_path, size="120x90"):
     """
     Create a small thumbnail for the given image using ffmpeg.
     Returns the thumbnail path, or None on failure.
+    Thumbnail is named as <basename>.thumb.jpg in the same directory as the image.
     """
-    thumb_path = image_path + ".thumb.jpg"
+    base, ext = os.path.splitext(image_path)
+    thumb_path = base + ".thumb.jpg"
     if os.path.exists(thumb_path):
         return thumb_path
     try:
@@ -135,6 +137,31 @@ def create_image_thumbnail(image_path, size="120x90"):
             return None
     except Exception as e:
         logger.error(f"Error creating thumbnail for {image_path}: {e}")
+        return None
+
+def create_video_thumbnail(video_path, size="120x90"):
+    """
+    Create a thumbnail for the given video using ffmpeg.
+    Returns the thumbnail path, or None on failure.
+    Thumbnail is named as <basename>.thumb.jpg in the same directory as the video.
+    """
+    base, ext = os.path.splitext(video_path)
+    thumb_path = base + ".thumb.jpg"
+    if os.path.exists(thumb_path):
+        return thumb_path
+    try:
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        subprocess.run([
+            "ffmpeg", "-y", "-i", video_path, "-vf", f"thumbnail,scale={size}:force_original_aspect_ratio=decrease", "-frames:v", "1", thumb_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(thumb_path):
+            logger.info(f"Video thumbnail created: {thumb_path}")
+            return thumb_path
+        else:
+            logger.warning(f"Video thumbnail creation failed: {thumb_path}")
+            return None
+    except Exception as e:
+        logger.error(f"Error creating video thumbnail for {video_path}: {e}")
         return None
 
 class WebhookHandler(BaseHTTPRequestHandler):
@@ -203,7 +230,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 text=True
             )
             logger.debug(f"FFmpeg video capture took {time.time() - start_time:.3f} seconds for {output_file}")
-            return {"status": "success", "video": output_file}
+            # Create thumbnail after successful capture
+            thumb_path = create_video_thumbnail(output_file)
+            return {"status": "success", "video": output_file, "thumb": thumb_path}
         except subprocess.CalledProcessError as e:
             error_msg = f"Failed to capture video from {rtsp_url}: {e.stderr}"
             return {"status": "error", "error": error_msg}
@@ -247,12 +276,19 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 result = future.result()
                 # If this is an image, ensure thumbnail is created (for robustness)
                 if result.get("status") == "success" and "image" in result:
-                    if not result.get("thumb"):
+                    base, ext = os.path.splitext(result["image"])
+                    thumb_path = base + ".thumb.jpg"
+                    if not os.path.exists(thumb_path):
                         thumb_path = create_image_thumbnail(result["image"])
-                        result["thumb"] = thumb_path
+                    result["thumb"] = thumb_path
                     logger.info(f"Image {i+1}/{num_images} captured successfully: {result['image']}, thumb: {result.get('thumb')}")
                 elif result.get("status") == "success" and "video" in result and result["video"]:
-                    logger.info(f"Video captured successfully: {result['video']}")
+                    base, ext = os.path.splitext(result["video"])
+                    thumb_path = base + ".thumb.jpg"
+                    if not os.path.exists(thumb_path):
+                        thumb_path = create_video_thumbnail(result["video"])
+                    result["thumb"] = thumb_path
+                    logger.info(f"Video captured successfully: {result['video']}, thumb: {result.get('thumb')}")
                 elif result.get("status") != "skipped":
                     logger.error(f"Capture failed: {result['error']}")
                 results.append(result)

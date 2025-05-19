@@ -331,44 +331,18 @@ def parse_media_info(media_filename):
 
 def get_video_thumbnail(video_path):
     """
-    Returns the thumbnail path for a video. If it doesn't exist, create it.
+    Returns the standardized thumbnail path for a video if it exists, else None.
     """
-    thumb_path = video_path + ".thumb.jpg"
-    if not os.path.exists(thumb_path):
-        # Use ffmpeg to extract the first frame as a thumbnail
-        try:
-            os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
-            subprocess.run([
-                "ffmpeg", "-y", "-i", video_path, "-vf", "thumbnail", "-frames:v", "1", thumb_path
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if os.path.exists(thumb_path):
-                logging.info(f"Thumbnail created: {thumb_path} for video {video_path}")
-            else:
-                logging.warning(f"Thumbnail creation failed (file not found after ffmpeg): {thumb_path} for video {video_path}")
-        except Exception as e:
-            logging.error(f"Error creating thumbnail for {video_path}: {e}")
-            return None
+    base, ext = os.path.splitext(video_path)
+    thumb_path = base + ".thumb.jpg"
     return thumb_path if os.path.exists(thumb_path) else None
 
 def get_image_thumbnail(image_path):
     """
-    Returns the thumbnail path for an image. If it doesn't exist, create it.
+    Returns the standardized thumbnail path for an image if it exists, else None.
     """
-    thumb_path = image_path + ".thumb.jpg"
-    if not os.path.exists(thumb_path):
-        try:
-            os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
-            # Use ffmpeg for consistency (works for images too)
-            subprocess.run([
-                "ffmpeg", "-y", "-i", image_path, "-vf", "scale=120:90:force_original_aspect_ratio=decrease", "-frames:v", "1", thumb_path
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if os.path.exists(thumb_path):
-                logging.info(f"Image thumbnail created: {thumb_path}")
-            else:
-                logging.warning(f"Image thumbnail creation failed: {thumb_path}")
-        except Exception as e:
-            logging.error(f"Error creating image thumbnail for {image_path}: {e}")
-            return None
+    base, ext = os.path.splitext(image_path)
+    thumb_path = base + ".thumb.jpg"
     return thumb_path if os.path.exists(thumb_path) else None
 
 def load_users():
