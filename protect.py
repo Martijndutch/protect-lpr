@@ -8,7 +8,12 @@ import os
 import concurrent.futures
 import time
 
-# Load configuration from config.json
+# Load configuration from config.json 
+# version 1.0
+# This script handles incoming webhooks, captures images and videos from RTSP streams,
+# and operates a barrier based on license plate recognition events.
+# Configuration file path
+
 CONFIG_FILE = "/opt/protect-lpr/config.json"
 
 try:
