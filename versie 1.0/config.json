@@ -1,0 +1,49 @@
+{
+  "paths": {
+    "log_dir": "/var/log/protect-lpr",
+    "log_file": "/var/log/protect-lpr/protect-lpr.log",
+    "image_dir": "/var/lib/protect-lpr/images",
+    "unknown_dir": "/var/lib/protect-lpr/images/unknown"
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(levelname)s - %(message)s"
+  },
+  "rtsp_streams": {
+    "68D79AE5ABE9": [
+      {
+        "name": "front",
+        "url": "rtsp://10.30.1.118:7447/2PA8oocoR98rwAlx"
+      }
+    ],
+    "E063DA01A4CE": [
+      {
+        "name": "main",
+        "url": "rtsp://10.30.1.118:7447/Gm9QmrYPUmlIKwHZ"
+      }
+    ],
+    "F4E2C67_SIM2": [
+      {
+        "name": "main",
+        "url": "rtsp://10.30.1.118:7447/Gm9QmrYPUmlIKwHZ"
+      },
+      {
+        "name": "side",
+        "url": "rtsp://10.30.1.118:7447/2PA8oocoR98rwAlx"
+      }
+    ],
+    "F4E2C6700BFE": [
+      {
+        "name": "front",
+        "url": "rtsp://10.30.1.118:7447/2PA8oocoR98rwAlx"
+      },
+      {
+        "name": "side",
+        "url": "rtsp://10.30.1.118:7447/Gm9QmrYPUmlIKwHZ"
+      }
+    ]
+  },
+  "server": {
+    "port": 1025
+  }
+}

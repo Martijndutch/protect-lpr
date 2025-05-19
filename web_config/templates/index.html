@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LPR Configuration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold mb-4">LPR Configuration</h1>
+        
+        <!-- RTSP Streams Section -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-2">RTSP Streams</h2>
+            <table id="streams-table" class="w-full border-collapse bg-white shadow-md">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Device ID</th>
+                        <th class="border p-2">Name</th>
+                        <th class="border p-2">URL</th>
+                        <th class="border p-2">Initial Delay (ms)</th>
+                        <th class="border p-2">Num Images</th>
+                        <th class="border p-2">Interval (ms)</th>
+                        <th class="border p-2">Video Duration (s)</th>
+                        <th class="border p-2">Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <button id="add-stream-btn" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded">Add Stream</button>
+        </div>
+
+        <!-- Ignored Plates Section -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-2">Ignored Plates</h2>
+            <ul id="plates-list" class="bg-white shadow-md p-4"></ul>
+            <div class="mt-4 flex">
+                <input id="new-plate" type="text" class="border p-2 flex-grow" placeholder="Enter license plate">
+                <button id="add-plate-btn" class="bg-blue-500 text-white px-4 py-2 ml-2">Add Plate</button>
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <button id="save-btn" class="bg-green-500 text-white px-4 py-2 rounded">Save Changes</button>
+        <p id="status-message" class="mt-2 text-red-500 hidden"></p>
+    </div>
+
+    <!-- Stream Form Modal -->
+    <div id="stream-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white p-6 rounded shadow-lg w-full max-w-lg">
+            <h3 class="text-xl font-semibold mb-4">Add/Edit Stream</h3>
+            <form id="stream-form">
+                <input type="hidden" id="edit-device-id" name="edit_device_id">
+                <input type="hidden" id="edit-stream-index" name="edit_stream_index">
+                <div class="mb-4">
+                    <label class="block">Device ID</label>
+                    <input type="text" id="device-id" name="device_id" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">Name</label>
+                    <input type="text" id="name" name="name" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">URL</label>
+                    <input type="text" id="url" name="url" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">Initial Delay (ms)</label>
+                    <input type="number" id="initial_delay_ms" name="initial_delay_ms" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">Number of Images</label>
+                    <input type="number" id="num_images" name="num_images" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">Interval (ms)</label>
+                    <input type="number" id="interval_ms" name="interval_ms" class="w-full border p-2" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block">Video Duration (s)</label>
+                    <input type="number" id="video_duration_s" name="video_duration_s" class="w-full border p-2" required>
+                </div>
+                <div class="flex justify-end">
+                    <button type="button" id="cancel-stream-btn" class="bg-gray-500 text-white px-4 py-2 mr-2">Cancel</button>
+                    <button type="submit" class="bg-blue-500 text-white px-4 py-2">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
