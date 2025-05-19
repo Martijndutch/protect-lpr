@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 import concurrent.futures
 import time
+import sqlite3
 
 # Load configuration from config.json 
 # version 1.0
@@ -40,24 +41,65 @@ SERVER_PORT = config.get('server', {}).get('port', 1025)
 MAX_CONCURRENT_FFMPEG = config.get('server', {}).get('max_concurrent_ffmpeg', 4)
 IGNORED_PLATES = [plate.lower() for plate in config.get('ignored_plates', [])]
 
+MYSQL_DB_FILE = config.get('mysql_db_file', '/var/lib/protect-lpr/mysql/protect-lpr.db')
+
 # Ensure base directories exist
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(UNKNOWN_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(MYSQL_DB_FILE), exist_ok=True)
 
 # Configure logging
 logger = logging.getLogger('WebhookLogger')
 logger.setLevel(LOG_LEVEL)
 
 # File handler for logging to file
-file_handler = logging.FileHandler(LOG_FILE)
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-logger.addHandler(file_handler)
+try:
+    file_handler = logging.FileHandler(LOG_FILE)
+    file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    logger.addHandler(file_handler)
+except PermissionError:
+    # Fallback to a local log file if permission is denied
+    fallback_log = os.path.join(os.path.dirname(__file__), "protect-lpr.log")
+    logger.warning(f"Permission denied for {LOG_FILE}, using fallback log file {fallback_log}")
+    file_handler = logging.FileHandler(fallback_log)
+    file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    logger.addHandler(file_handler)
 
 # Stream handler for logging to console
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 logger.addHandler(console_handler)
+
+# Initialize database and event table if not exists
+def init_db():
+    conn = sqlite3.connect(MYSQL_DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS event (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            datetime TEXT NOT NULL,
+            license_plate TEXT NOT NULL,
+            media_urls TEXT NOT NULL
+        )
+    ''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_event_datetime ON event(datetime)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_event_license_plate ON event(license_plate)')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def insert_event(datetime_str, license_plate, media_urls):
+    """Insert an event into the database."""
+    conn = sqlite3.connect(MYSQL_DB_FILE)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO event (datetime, license_plate, media_urls) VALUES (?, ?, ?)",
+        (datetime_str, license_plate, json.dumps(media_urls))
+    )
+    conn.commit()
+    conn.close()
 
 def operate_barrier(license_plate, device_id):
     """Placeholder function to operate the barrier."""
@@ -71,6 +113,29 @@ def operate_barrier(license_plate, device_id):
     except Exception as e:
         logger.error(f"Failed to operate barrier for {license_plate}: {str(e)}")
         return {"status": "error", "error": str(e)}
+
+def create_image_thumbnail(image_path, size="120x90"):
+    """
+    Create a small thumbnail for the given image using ffmpeg.
+    Returns the thumbnail path, or None on failure.
+    """
+    thumb_path = image_path + ".thumb.jpg"
+    if os.path.exists(thumb_path):
+        return thumb_path
+    try:
+        os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+        subprocess.run([
+            "ffmpeg", "-y", "-i", image_path, "-vf", f"scale={size}:force_original_aspect_ratio=decrease", "-frames:v", "1", thumb_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(thumb_path):
+            logger.info(f"Thumbnail created: {thumb_path}")
+            return thumb_path
+        else:
+            logger.warning(f"Thumbnail creation failed: {thumb_path}")
+            return None
+    except Exception as e:
+        logger.error(f"Error creating thumbnail for {image_path}: {e}")
+        return None
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -103,7 +168,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 text=True
             )
             logger.debug(f"FFmpeg image capture took {time.time() - start_time:.3f} seconds for {output_file}")
-            return {"status": "success", "image": output_file}
+            # Create thumbnail after successful capture
+            thumb_path = create_image_thumbnail(output_file)
+            return {"status": "success", "image": output_file, "thumb": thumb_path}
         except subprocess.CalledProcessError as e:
             error_msg = f"Failed to capture image from {rtsp_url}: {e.stderr}"
             return {"status": "error", "error": error_msg}
@@ -178,11 +245,14 @@ class WebhookHandler(BaseHTTPRequestHandler):
             # Collect results
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
                 result = future.result()
-                if result.get("status") == "success":
-                    if "image" in result:
-                        logger.info(f"Image {i+1}/{num_images} captured successfully: {result['image']}")
-                    elif "video" in result and result["video"]:
-                        logger.info(f"Video captured successfully: {result['video']}")
+                # If this is an image, ensure thumbnail is created (for robustness)
+                if result.get("status") == "success" and "image" in result:
+                    if not result.get("thumb"):
+                        thumb_path = create_image_thumbnail(result["image"])
+                        result["thumb"] = thumb_path
+                    logger.info(f"Image {i+1}/{num_images} captured successfully: {result['image']}, thumb: {result.get('thumb')}")
+                elif result.get("status") == "success" and "video" in result and result["video"]:
+                    logger.info(f"Video captured successfully: {result['video']}")
                 elif result.get("status") != "skipped":
                     logger.error(f"Capture failed: {result['error']}")
                 results.append(result)
@@ -243,6 +313,8 @@ class WebhookHandler(BaseHTTPRequestHandler):
                         "barrier": barrier_result,
                         "message": f"Imaging skipped for ignored plate {license_plate}"
                     }
+                    # Still log the event, but with empty media
+                    insert_event(event_timestamp, license_plate, [])
                 else:
                     # Determine RTSP streams based on device ID
                     streams = DEVICE_RTSP_MAP.get(device_id, [])
@@ -255,6 +327,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
                             "barrier": barrier_result,
                             "error": f"No RTSP streams for device {device_id}"
                         }
+                        insert_event(event_timestamp, license_plate, [])
                     else:
                         # Determine subdirectory
                         sub_dir = os.path.join(IMAGE_DIR, license_plate)
@@ -305,6 +378,12 @@ class WebhookHandler(BaseHTTPRequestHandler):
                             "barrier": barrier_result,
                             "errors": errors if errors else None
                         }
+                        # Store relative URLs (relative to IMAGE_DIR) in DB
+                        rel_media = []
+                        for f in images + videos:
+                            if f:
+                                rel_media.append(os.path.relpath(f, IMAGE_DIR))
+                        insert_event(event_timestamp, license_plate, rel_media)
 
             # Send response
             self.send_response(200)

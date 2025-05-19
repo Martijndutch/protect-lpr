@@ -88,6 +88,9 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 source "$VENV_DIR/bin/activate"
 
+# Upgrade pip to latest
+pip install --upgrade pip
+
 # Install Flask and Gunicorn in virtual environment
 print_status "Installing Flask and Gunicorn..."
 pip install flask gunicorn || print_error "Failed to install Flask or Gunicorn"
@@ -133,11 +136,11 @@ def read_config():
 
 def write_config(config):
     """Write the config.json file."""
-    try:
+    try {
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
         logger.info("Config updated successfully")
-    except Exception as e:
+    } except Exception as e {
         logger.error(f"Failed to write config: {str(e)}")
         raise
 
@@ -499,6 +502,18 @@ EOF
 chown -R "$USER:$GROUP" "$APP_DIR"
 chmod -R 775 "$APP_DIR"
 
+# Ensure static/videoicon.svg exists (video icon for LPR web UI)
+if [ ! -f "$STATIC_DIR/videoicon.svg" ]; then
+cat > "$STATIC_DIR/videoicon.svg" << 'EOF'
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="16" cy="16" r="16" fill="#222" fill-opacity="0.7"/>
+  <polygon points="12,9 24,16 12,23" fill="#fff"/>
+</svg>
+EOF
+fi
+chown "$USER:$GROUP" "$STATIC_DIR/videoicon.svg"
+chmod 644 "$STATIC_DIR/videoicon.svg"
+
 # Step 5: Ensure config.json exists and has correct permissions
 print_status "Configuring config.json..."
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -522,9 +537,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
     }
 }
 EOF
+    chown "$USER:$GROUP" "$CONFIG_FILE"
+    chmod 664 "$CONFIG_FILE"
+else
+    print_status "config.json already exists, not overwriting."
 fi
-chown "$USER:$GROUP" "$CONFIG_FILE"
-chmod 664 "$CONFIG_FILE"
 
 # Step 6: Configure Nginx
 print_status "Configuring Nginx..."

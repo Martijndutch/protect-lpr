@@ -29,11 +29,11 @@ def read_config():
 
 def write_config(config):
     """Write the config.json file."""
-    try:
+    try {
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
         logger.info("Config updated successfully")
-    except Exception as e:
+    } except Exception as e {
         logger.error(f"Failed to write config: {str(e)}")
         raise
 
