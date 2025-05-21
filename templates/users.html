@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Gebruikersbeheer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; }
+        .container { max-width: 500px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+        h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        input[type="text"], input[type="password"], select { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc; }
+        input[type="submit"], button { padding: 6px 12px; border-radius: 4px; border: none; background: #2c3e50; color: #fff; cursor: pointer; }
+        .msg { color: green; text-align: center; }
+        .err { color: red; text-align: center; }
+        a { display: inline-block; margin-top: 16px; color: #2c3e50; }
+        @media (max-width: 768px) {
+            .container { padding: 16px; }
+            table { font-size: 14px; }
+            input[type="text"], input[type="password"], select { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Gebruikersbeheer</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <table>
+            <tr><th>Gebruiker</th><th>Rol</th><th>Actie</th></tr>
+            {% for uname, u in users.items() %}
+            <tr>
+                <td>{{ uname }}</td>
+                <td>{{ u['role'] }}</td>
+                <td>
+                    {% if uname != 'admin' %}
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="username" value="{{ uname }}">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="submit" value="Verwijder">
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <h3>Nieuwe gebruiker toevoegen</h3>
+        <form method="post">
+            <input type="hidden" name="action" value="add">
+            <input type="text" name="username" placeholder="Gebruikersnaam" required>
+            <input type="password" name="password" placeholder="Wachtwoord" required>
+            <select name="role">
+                <option value="readonly">Alleen lezen</option>
+                <option value="admin">Admin</option>
+            </select>
+            <input type="submit" value="Toevoegen">
+        </form>
+        <a href="{{ url_for('config_bp.config_page') }}">Terug naar configuratie</a>
+    </div>
+</body>
+</html>

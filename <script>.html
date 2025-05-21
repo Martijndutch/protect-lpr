@@ -1,0 +1,59 @@
+<script>
+    function addDeviceRow() {
+        const table = document.getElementById('rtsp_devices').getElementsByTagName('tbody')[0];
+        const rowCount = table.rows.length + 1;
+        const row = table.insertRow();
+        const deviceIdInputName = `device_ids_${rowCount}`;
+        row.innerHTML = `
+            <td><input type="text" name="${deviceIdInputName}" placeholder="Device ID" oninput="updateStreamIds('${rowCount}')"></td>
+            <td>
+                <table class="rtsp-table">
+                    <thead>
+                        <tr>
+                            <th>Naam</th>
+                            <th>RTSP URL</th>
+                            <th>Initial delay (ms)</th>
+                            <th>Interval (ms)</th>
+                            <th># Images</th>
+                            <th>Video duration (s)</th>
+                            <th>Actie</th>
+                        </tr>
+                    </thead>
+                    <tbody id="streams_${rowCount}"></tbody>
+                </table>
+                <button type="button" class="add-btn" onclick="addStreamRow('streams_${rowCount}', '${rowCount}')">+ Stream</button>
+            </td>
+            <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
+        `;
+    }
+
+    function addStreamRow(streamId, deviceRowIndex) {
+        const table = document.getElementById(streamId);
+        const rowCount = table.rows.length + 1;
+        const deviceInput = document.querySelector(`input[name="device_ids_${deviceRowIndex}"]`);
+        const deviceId = deviceInput ? deviceInput.value : `device_${deviceRowIndex}`;
+        const row = table.insertRow();
+        row.innerHTML = `
+            <td><input type="text" name="stream_names_${deviceId}_${rowCount}" placeholder="Naam"></td>
+            <td><input type="text" name="stream_urls_${deviceId}_${rowCount}" placeholder="RTSP URL"></td>
+            <td><input type="number" name="initial_delay_ms_${deviceId}_${rowCount}" placeholder="Initial delay"></td>
+            <td><input type="number" name="interval_ms_${deviceId}_${rowCount}" placeholder="Interval"></td>
+            <td><input type="number" name="num_images_${deviceId}_${rowCount}" placeholder="# Images"></td>
+            <td><input type="number" name="video_duration_s_${deviceId}_${rowCount}" placeholder="Video duration"></td>
+            <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
+        `;
+    }
+
+    function updateStreamIds(deviceRowIndex) {
+        const deviceInput = document.querySelector(`input[name="device_ids_${deviceRowIndex}"]`);
+        const deviceId = deviceInput ? deviceInput.value : `device_${deviceRowIndex}`;
+        const streamTable = document.getElementById(`streams_${deviceRowIndex}`);
+        if (streamTable) {
+            Array.from(streamTable.querySelectorAll('input')).forEach(input => {
+                const nameParts = input.name.split('_');
+                nameParts[2] = deviceId; // Update the device_id part of the name
+                input.name = nameParts.join('_');
+            });
+        }
+    }
+</script>

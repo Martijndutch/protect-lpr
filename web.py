@@ -637,23 +637,3 @@ def config():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8082, debug=True)
-
-# OWASP Top 10 quick review for this app:
-# 1. Injection: SQL queries use parameterized queries, so SQL injection is mitigated.
-# 2. Broken Authentication: Passwords are hashed, sessions are used, and login is required for all sensitive routes.
-# 3. Sensitive Data Exposure: Passwords are hashed, but ensure HTTPS is used in production to protect credentials in transit.
-# 4. XML External Entities (XXE): Not applicable (no XML processing).
-# 5. Broken Access Control: Role checks are enforced for admin-only routes (e.g., config, users).
-# 6. Security Misconfiguration: Flask debug mode should be disabled in production. Ensure file permissions are correct.
-# 7. Cross-Site Scripting (XSS): Jinja2 auto-escapes variables, but be careful with user-supplied HTML.
-# 8. Insecure Deserialization: Not applicable (no pickle or similar).
-# 9. Using Components with Known Vulnerabilities: Keep Flask and dependencies up to date.
-# 10. Insufficient Logging & Monitoring: Logging is present, but review log coverage and retention.
-
-# Recommendations:
-# - Always run behind HTTPS in production.
-# - Set secure session cookie flags (SESSION_COOKIE_SECURE, SESSION_COOKIE_HTTPONLY).
-# - Limit file upload/serving to prevent path traversal.
-# - Regularly update dependencies.
-# - Consider rate limiting and account lockout for brute-force protection.
-# - Review logging for sensitive data leaks.

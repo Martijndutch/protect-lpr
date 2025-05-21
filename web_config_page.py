@@ -2,9 +2,14 @@ from flask import Flask, render_template_string, request, redirect, url_for, fla
 import json
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
+import logging
 
 app = Flask(__name__)
-app.secret_key = "protect-lpr-secret"
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'protect-lpr-secret')  # Use environment variable for secret key
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 config_bp = Blueprint('config_bp', __name__, url_prefix='/config')
 
@@ -45,16 +50,18 @@ CONFIG_TEMPLATE = """
     <script>
         function addDeviceRow() {
             const table = document.getElementById('rtsp_devices');
+            const existingDevices = {{ config['rtsp_streams']|length }};
+            const newIndex = table.rows.length - 1 + existingDevices;
             const row = table.insertRow(-1);
             row.innerHTML = `
                 <td><input type="text" name="device_ids" placeholder="Device ID"></td>
                 <td colspan="8">
                     <table class="rtsp-table" style="margin:0;">
-                        <tbody id="streams_new_${table.rows.length}">
+                        <tbody id="streams_${newIndex}">
                             <!-- Stream rows will be added here -->
                         </tbody>
                     </table>
-                    <button type="button" class="add-btn" onclick="addStreamRow('streams_new_${table.rows.length}')">+ Stream</button>
+                    <button type="button" class="add-btn" onclick="addStreamRow('streams_${newIndex}')">+ Stream</button>
                 </td>
                 <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
             `;
@@ -63,12 +70,12 @@ CONFIG_TEMPLATE = """
             const tbody = document.getElementById(tbodyId);
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><input type="text" name="stream_names_${tbodyId}" placeholder="Naam"></td>
-                <td><input type="text" name="stream_urls_${tbodyId}" placeholder="RTSP URL"></td>
-                <td><input type="number" name="initial_delay_ms_${tbodyId}" value="100"></td>
-                <td><input type="number" name="interval_ms_${tbodyId}" value="200"></td>
-                <td><input type="number" name="num_images_${tbodyId}" value="2"></td>
-                <td><input type="number" name="video_duration_s_${tbodyId}" value="0"></td>
+                <td><input type="text" name="stream_names_${tbodyId}[]" placeholder="Naam"></td>
+                <td><input type="text" name="stream_urls_${tbodyId}[]" placeholder="RTSP URL"></td>
+                <td><input type="number" name="initial_delay_ms_${tbodyId}[]" value="100"></td>
+                <td><input type="number" name="interval_ms_${tbodyId}[]" value="200"></td>
+                <td><input type="number" name="num_images_${tbodyId}[]" value="2"></td>
+                <td><input type="number" name="video_duration_s_${tbodyId}[]" value="0"></td>
                 <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
             `;
             tbody.appendChild(row);
@@ -135,6 +142,7 @@ CONFIG_TEMPLATE = """
                     </thead>
                     <tbody>
                         {% for device_id, streams in config['rtsp_streams'].items() %}
+                        {% set device_index = loop.index %}
                         <tr>
                             <td>
                                 <input type="text" name="device_ids" value="{{ device_id }}">
@@ -152,21 +160,21 @@ CONFIG_TEMPLATE = """
                                             <th>Actie</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="streams_{{ loop.index }}">
+                                    <tbody id="streams_{{ device_index }}">
                                         {% for stream in streams %}
                                         <tr>
-                                            <td><input type="text" name="stream_names_streams_{{ loop.index }}" value="{{ stream['name'] }}"></td>
-                                            <td><input type="text" name="stream_urls_streams_{{ loop.index }}" value="{{ stream['url'] }}"></td>
-                                            <td><input type="number" name="initial_delay_ms_streams_{{ loop.index }}" value="{{ stream['initial_delay_ms'] }}"></td>
-                                            <td><input type="number" name="interval_ms_streams_{{ loop.index }}" value="{{ stream['interval_ms'] }}"></td>
-                                            <td><input type="number" name="num_images_streams_{{ loop.index }}" value="{{ stream['num_images'] }}"></td>
-                                            <td><input type="number" name="video_duration_s_streams_{{ loop.index }}" value="{{ stream['video_duration_s'] }}"></td>
+                                            <td><input type="text" name="stream_names_streams_{{ device_index }}[]" value="{{ stream['name'] }}"></td>
+                                            <td><input type="text" name="stream_urls_streams_{{ device_index }}[]" value="{{ stream['url'] }}"></td>
+                                            <td><input type="number" name="initial_delay_ms_streams_{{ device_index }}[]" value="{{ stream['initial_delay_ms'] }}"></td>
+                                            <td><input type="number" name="interval_ms_streams_{{ device_index }}[]" value="{{ stream['initial_delay_ms'] }}"></td>
+                                            <td><input type="number" name="num_images_streams_{{ device_index }}[]" value="{{ stream['num_images'] }}"></td>
+                                            <td><input type="number" name="video_duration_s_streams_{{ device_index }}[]" value="{{ stream['video_duration_s'] }}"></td>
                                             <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
-                                <button type="button" class="add-btn" onclick="addStreamRow('streams_{{ loop.index }}')">+ Stream</button>
+                                <button type="button" class="add-btn" onclick="addStreamRow('streams_{{ device_index }}')">+ Stream</button>
                             </td>
                             <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
                         </tr>
@@ -251,7 +259,25 @@ USERS_TEMPLATE = """
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return {}
+        return {
+            'paths': {
+                'log_dir': '/var/log/protect-lpr',
+                'log_file': '/var/log/protect-lpr/protect-lpr.log',
+                'image_dir': '/var/lib/protect-lpr/images',
+                'unknown_dir': '/var/lib/protect-lpr/images/unknown'
+            },
+            'logging': {
+                'level': 'INFO',
+                'format': '%(asctime)s - %(levelname)s - %(message)s'
+            },
+            'server': {
+                'port': 1025,
+                'max_concurrent_ffmpeg': 4
+            },
+            'mysql_db_file': '/var/lib/protect-lpr/mysql/protect-lpr.db',
+            'ignored_plates': [],
+            'rtsp_streams': {}
+        }
     with open(CONFIG_FILE, 'r') as f:
         return json.load(f)
 
@@ -281,6 +307,7 @@ def save_users(users):
 def config_page():
     if request.method == 'POST':
         try:
+            logger.debug(f"Received form data: {request.form}")
             config = load_config()
             # Paths
             config['paths']['log_dir'] = request.form.get('log_dir', config['paths']['log_dir'])
@@ -296,25 +323,25 @@ def config_page():
             # MySQL DB file
             config['mysql_db_file'] = request.form.get('mysql_db_file', config['mysql_db_file'])
             # Ignored plates
-            plates = request.form.getlist('ignored_plates')
-            config['ignored_plates'] = [p for p in plates if p.strip()]
+            config['ignored_plates'] = [p for p in request.form.getlist('ignored_plates') if p.strip()]
             # RTSP streams
             rtsp_streams = {}
             device_ids = request.form.getlist('device_ids')
             for idx, device_id in enumerate(device_ids):
                 if not device_id.strip():
+                    logger.warning(f"Skipping device {idx+1}: empty device_id")
                     continue
                 streams = []
                 stream_prefix = f"streams_{idx+1}"
-                # Collect all stream fields for this device
-                names = request.form.getlist(f"stream_names_{stream_prefix}")
-                urls = request.form.getlist(f"stream_urls_{stream_prefix}")
-                initial_delays = request.form.getlist(f"initial_delay_ms_{stream_prefix}")
-                intervals = request.form.getlist(f"interval_ms_{stream_prefix}")
-                num_images = request.form.getlist(f"num_images_{stream_prefix}")
-                video_durations = request.form.getlist(f"video_duration_s_{stream_prefix}")
+                names = request.form.getlist(f"stream_names_{stream_prefix}[]")
+                urls = request.form.getlist(f"stream_urls_{stream_prefix}[]")
+                initial_delays = request.form.getlist(f"initial_delay_ms_{stream_prefix}[]")
+                intervals = request.form.getlist(f"interval_ms_{stream_prefix}[]")
+                num_images = request.form.getlist(f"num_images_{stream_prefix}[]")
+                video_durations = request.form.getlist(f"video_duration_s_{stream_prefix}[]")
                 for i in range(len(names)):
                     if not names[i].strip() or not urls[i].strip():
+                        logger.warning(f"Skipping stream {i+1} for device {device_id}: empty name or URL")
                         continue
                     streams.append({
                         "name": names[i],
@@ -331,6 +358,7 @@ def config_page():
             flash("Configuratie succesvol opgeslagen.", "msg")
             return redirect(url_for('config_bp.config_page'))
         except Exception as e:
+            logger.error(f"Error saving config: {e}")
             flash(f"Fout bij opslaan: {e}", "err")
             config = load_config()
             return render_template_string(CONFIG_TEMPLATE, config=config)
@@ -340,7 +368,6 @@ def config_page():
 
 @config_bp.route('/users', methods=['GET', 'POST'])
 def users_page():
-    # Only allow admin
     if session.get("role") != "admin":
         flash("Geen toegang.", "err")
         return redirect(url_for('config_bp.config_page'))

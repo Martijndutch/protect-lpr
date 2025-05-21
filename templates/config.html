@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuratie</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; }
+        .container { max-width: 700px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+        h1 { text-align: center; color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        input[type="text"], input[type="submit"] { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        input[type="submit"] { background: #2c3e50; color: #fff; cursor: pointer; }
+        .msg { color: green; text-align: center; }
+        .err { color: red; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configuratie</h1>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <form method="post">
+            <h2>RTSP Streams</h2>
+            <table>
+                <tr>
+                    <th>Device ID</th>
+                    <th>Streams</th>
+                </tr>
+                {% for device in devices %}
+                <tr>
+                    <td>{{ device.id }}</td>
+                    <td>
+                        <ul>
+                            {% for stream in device.streams %}
+                            <li>{{ stream }}</li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            <input type="submit" value="Opslaan">
+        </form>
+        <a href="{{ url_for('home') }}">Terug naar overzicht</a>
+    </div>
+</body>
+</html>
