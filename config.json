@@ -85,5 +85,6 @@
     "2345"
   ],
   "mysql_db_file": "/var/lib/protect-lpr/mysql/protect-lpr.db",
-  "users_file": "/opt/protect-lpr/users.json"
+  "users_file": "/opt/protect-lpr/users.json",
+  "retention_days": 1
 }
