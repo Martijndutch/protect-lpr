@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Login</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: Arial, sans-serif; background: #f7f7f7; }
+.container { max-width: 350px; margin: 60px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+h2 { text-align: center; }
+input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #ccc; }
+input[type="submit"] { width: 100%; padding: 8px; border-radius: 4px; border: none; background: #2c3e50; color: #fff; cursor: pointer; }
+.msg { color: green; text-align: center; }
+.err { color: red; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h2>Login</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+        {% if require_2fa %}
+            <input type="hidden" name="username" value="{{ username|default('') }}">
+            <input type="number" name="otp" placeholder="2FA code" required autocomplete="one-time-code">
+        {% else %}
+            <input type="text" name="username" placeholder="Gebruikersnaam" required value="{{ username|default('') }}">
+            <input type="password" name="password" placeholder="Wachtwoord" required>
+        {% endif %}
+        <input type="submit" value="Login">
+    </form>
+    {% if session.get('username') %}
+        <div style="text-align:center; margin-top:16px;">
+            <a href="{{ url_for('logout') }}">Logout ({{ session.get('username') }})</a>
+        </div>
+    {% endif %}
+</div>
+</body>
+</html>

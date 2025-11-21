@@ -2,11 +2,11 @@
 # Version history:
 # 1.0.0 - Add version history and file version header. (2024-06-09)
 
-from flask import Flask, render_template_string, request, redirect, url_for, flash, session, render_template, current_app
+from flask import Flask, render_template_string, request, redirect, url_for, flash, session
 import sqlite3
 import os
 import json
-#import subprocess
+import subprocess
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
@@ -17,14 +17,8 @@ except ImportError:
     PIL_AVAILABLE = False
     logging.warning("PIL (Pillow) is not installed. Image thumbnail generation is disabled.")
 
-import pyotp
-import qrcode
-import io
-import base64
-
 from datetime import datetime
 import pytz
-import ipaddress
 
 def setup_logging_from_config(config):
     log_dir = config["paths"].get("log_dir", "/opt/protect-lpr/logs")
@@ -63,9 +57,8 @@ app.register_blueprint(config_bp)
 from purge_plate import purge_bp
 app.config['DB_FILE'] = CONFIG["paths"]["mysql_db_file"]
 app.config['IMAGE_DIR'] = CONFIG["paths"]["image_dir"]
-app.config['SIZES'] = CONFIG["paths"]["sizes"]
-# Register purge_bp at /config/purge_plate
-#app.register_blueprint(purge_bp, url_prefix='/config/purge_plate')
+# Register purge_bp at root of /config, not /config/config
+app.register_blueprint(purge_bp, url_prefix='/config')
 
 # Import and register stats blueprint
 from web_stats import stats_bp
@@ -189,34 +182,7 @@ HTML_TEMPLATE = """
                 vid.autoplay = true;
                 vid.style.maxWidth = '80vw';
                 vid.style.maxHeight = '80vh';
-                vid.id = "popup-video";
                 popupContent.appendChild(vid);
-
-                // Frame-by-frame controls
-                var frameControls = document.createElement('div');
-                frameControls.style = "margin-top:10px; text-align:center;";
-                var prevFrameBtn = document.createElement('button');
-                prevFrameBtn.innerText = "Vorige frame";
-                prevFrameBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    stepFrame(-1);
-                };
-                var nextFrameBtn = document.createElement('button');
-                nextFrameBtn.innerText = "Volgende frame";
-                nextFrameBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    stepFrame(1);
-                };
-                var exportFrameBtn = document.createElement('button');
-                exportFrameBtn.innerText = "Exporteer frame";
-                exportFrameBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    exportCurrentFrame();
-                };
-                frameControls.appendChild(prevFrameBtn);
-                frameControls.appendChild(nextFrameBtn);
-                frameControls.appendChild(exportFrameBtn);
-                popupContent.appendChild(frameControls);
             } else {
                 var img = document.createElement('img');
                 img.src = src;
@@ -275,41 +241,6 @@ HTML_TEMPLATE = """
         function closePopup() {
             document.getElementById('thumb-popup-bg').classList.remove('active');
         }
-
-        // --- Frame-by-frame and export logic ---
-        function stepFrame(direction) {
-            var vid = document.getElementById('popup-video');
-            if (!vid) return;
-            // Try to get frame rate from video metadata, fallback to 25fps
-            var fps = 25;
-            if (vid.readyState >= 2 && vid.videoWidth && vid.videoHeight) {
-                // No standard way to get FPS, so use 25 as default
-            }
-            var frameTime = 1 / fps;
-            if (direction < 0) {
-                vid.pause();
-                vid.currentTime = Math.max(0, vid.currentTime - frameTime);
-            } else if (direction > 0) {
-                vid.pause();
-                vid.currentTime = Math.min(vid.duration, vid.currentTime + frameTime);
-            }
-        }
-
-        function exportCurrentFrame() {
-            var vid = document.getElementById('popup-video');
-            if (!vid) return;
-            var canvas = document.createElement('canvas');
-            canvas.width = vid.videoWidth;
-            canvas.height = vid.videoHeight;
-            var ctx = canvas.getContext('2d');
-            ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-            // Open the frame as an image in a new tab
-            var dataUrl = canvas.toDataURL('image/png');
-            var win = window.open();
-            win.document.write('<img src="' + dataUrl + '" style="max-width:100%;">');
-        }
-        // --- End frame-by-frame logic ---
-
         window.addEventListener('DOMContentLoaded', function() {
             document.getElementById('thumb-popup-bg').addEventListener('click', function(e) {
                 if(e.target === this) closePopup();
@@ -354,7 +285,7 @@ HTML_TEMPLATE = """
                 <a href="{{ url_for('config_bp.config_page') }}">Configuratie</a> |
             {% endif %}
             <a href="{{ url_for('stats_bp.stats_page') }}">Statistieken</a>
-            {% if session.get('username') and 'logout' in current_app.view_functions %}
+            {% if session.get('username') %}
                 | <a href="{{ url_for('logout') }}">Logout ({{ session.get('username') }})</a>
             {% endif %}
         </div>
@@ -465,6 +396,12 @@ CONFIG_TEMPLATE = """
 
 import re
 
+def normalize_plate_input(plate):
+    # Remove dashes and spaces, allow only alphanumerics (defense-in-depth)
+    import re
+    plate = plate.replace('-', '').replace(' ', '')
+    return re.sub(r'[^A-Za-z0-9]', '', plate)
+
 def plate_to_sql_like(plate):
     # Remove dashes and spaces, but keep * and % as wildcards
     import re
@@ -560,15 +497,15 @@ def get_video_thumbnail(video_path):
     """
     base, ext = os.path.splitext(video_path)
     thumb_path = base + ".thumb.jpg"
-    #if not os.path.exists(thumb_path):
-    #    try:
-    #        # Generate thumbnail using ffmpeg (first frame)
-    #        subprocess.run([
-    #            "ffmpeg", "-y", "-i", video_path, "-ss", "00:00:00.000", "-vframes", "1", "-vf", "scale=320:-1", thumb_path
-    #        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    #    except Exception as e:
-    #        logging.error(f"Failed to generate video thumbnail for {video_path}: {e}")
-    #        return None
+    if not os.path.exists(thumb_path):
+        try:
+            # Generate thumbnail using ffmpeg (first frame)
+            subprocess.run([
+                "ffmpeg", "-y", "-i", video_path, "-ss", "00:00:00.000", "-vframes", "1", "-vf", "scale=320:-1", thumb_path
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            logging.error(f"Failed to generate video thumbnail for {video_path}: {e}")
+            return None
     return thumb_path if os.path.exists(thumb_path) else None
 
 def get_image_thumbnail(image_path):
@@ -597,8 +534,7 @@ def load_users():
         users = {
             "admin": {
                 "password": generate_password_hash("100%lpr"),
-                "role": "admin",
-                "2fa_secret": None
+                "role": "admin"
             }
         }
         with open(USERS_FILE, "w") as f:
@@ -606,12 +542,7 @@ def load_users():
         logging.info("Created initial admin user.")
         return users
     with open(USERS_FILE, "r") as f:
-        users = json.load(f)
-        # Ensure all users have 2fa_secret field
-        for u in users.values():
-            if "2fa_secret" not in u:
-                u["2fa_secret"] = None
-        return users
+        return json.load(f)
 
 def save_users(users):
     # Prevent path traversal for USERS_FILE
@@ -634,150 +565,98 @@ def login_required(role=None):
         return decorated_function
     return decorator
 
-def get_client_ip():
-    # Use X-Forwarded-For if present (reverse proxy), else remote_addr
-    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    if ip and ',' in ip:
-        ip = ip.split(',')[0].strip()
-    return ip
-
-def is_private_ip(ip):
-    try:
-        ip_obj = ipaddress.ip_address(ip)
-        return ip_obj.is_private or ip_obj.is_loopback
-    except Exception:
-        return False
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     users = load_users()
-    client_ip = get_client_ip()
-    # Step 1: Username/password form
     if request.method == 'POST':
-        # If we're in the 2FA step, session will have 'pending_2fa_user'
-        if session.get('pending_2fa_user'):
-            username = session['pending_2fa_user']
-            user = users.get(username)
-            # Check if IP is private: skip 2FA if so
-            if is_private_ip(client_ip):
-                session.pop('pending_2fa_user', None)
-                session['username'] = username
-                session['role'] = user['role']
-                logging.info(f"User '{username}' logged in (LAN/no 2FA).")
-                flash("Ingelogd als %s (LAN, geen 2FA vereist)" % username, "msg")
-                return redirect(url_for('home'))
-            otp_code = request.form.get('otp', '').strip()
-            if not user or not user.get("2fa_secret"):
-                flash("2FA niet ingesteld voor deze gebruiker.", "err")
-                session.pop('pending_2fa_user', None)
-                return redirect(url_for('login'))
-            totp = pyotp.TOTP(user["2fa_secret"])
-            if totp.verify(otp_code):
-                session.pop('pending_2fa_user', None)
-                session['username'] = username
-                session['role'] = user['role']
-                logging.info(f"User '{username}' logged in (2FA).")
-                flash("Ingelogd als %s" % username, "msg")
-                return redirect(url_for('home'))
-            else:
-                flash("Ongeldige 2FA code.", "err")
-                return render_template("login.html", require_2fa=True, username=username)
-        # Step 0: Username/password step
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+        # Only allow alphanumeric usernames (defense-in-depth)
         import re
         if not re.match(r'^[A-Za-z0-9_@.-]{1,32}$', username):
             flash("Ongeldige gebruikersnaam.", "err")
-            return render_template("login.html")
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html><head>
+            <title>Login</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+            body { font-family: Arial, sans-serif; background: #f7f7f7; }
+            .container { max-width: 350px; margin: 60px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+            h2 { text-align: center; }
+            input[type="text"], input[type="password"] { width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #ccc; }
+            input[type="submit"] { width: 100%; padding: 8px; border-radius: 4px; border: none; background: #2c3e50; color: #fff; cursor: pointer; }
+            .msg { color: green; text-align: center; }
+            .err { color: red; text-align: center; }
+            </style>
+            </head><body>
+            <div class="container">
+                <h2>Login</h2>
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    {% for category, message in messages %}
+                      <div class="{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+                <form method="post">
+                    <input type="text" name="username" placeholder="Gebruikersnaam" required>
+                    <input type="password" name="password" placeholder="Wachtwoord" required>
+                    <input type="submit" value="Login">
+                </form>
+            </div>
+            </body></html>
+            """)
         user = users.get(username)
         if user and check_password_hash(user['password'], password):
-            # If IP is private, skip 2FA entirely
-            if is_private_ip(client_ip):
-                session['username'] = username
-                session['role'] = user['role']
-                logging.info(f"User '{username}' logged in (LAN/no 2FA).")
-                flash("Ingelogd als %s (LAN, geen 2FA vereist)" % username, "msg")
-                return redirect(url_for('home'))
-            # 2FA setup/enforcement
-            if not user.get("2fa_secret"):
-                # Generate secret and save, then redirect to setup
-                secret = pyotp.random_base32()
-                user["2fa_secret"] = secret
-                save_users(users)
-                session['pending_2fa_user'] = username
-                return redirect(url_for('twofa_setup'))
-            else:
-                # Prompt for 2FA code only
-                session['pending_2fa_user'] = username
-                return render_template("login.html", require_2fa=True, username=username)
+            session['username'] = username
+            session['role'] = user['role']
+            logging.info(f"User '{username}' logged in.")
+            flash("Ingelogd als %s" % username, "msg")
+            return redirect(url_for('home'))
         else:
             logging.warning(f"Failed login attempt for user '{username}'.")
             flash("Ongeldige gebruikersnaam of wachtwoord.", "err")
-            return render_template("login.html")
-    # GET: show username/password form or 2FA form if in session
-    if session.get('pending_2fa_user'):
-        # If IP is private, skip 2FA prompt and log in
-        username = session['pending_2fa_user']
-        user = users.get(username)
-        if is_private_ip(client_ip):
-            session.pop('pending_2fa_user', None)
-            session['username'] = username
-            session['role'] = user['role']
-            logging.info(f"User '{username}' logged in (LAN/no 2FA).")
-            flash("Ingelogd als %s (LAN, geen 2FA vereist)" % username, "msg")
-            return redirect(url_for('home'))
-        return render_template("login.html", require_2fa=True, username=username)
-    return render_template("login.html")
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html><head>
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+    body { font-family: Arial, sans-serif; background: #f7f7f7; }
+    .container { max-width: 350px; margin: 60px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+    h2 { text-align: center; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #ccc; }
+    input[type="submit"] { width: 100%; padding: 8px; border-radius: 4px; border: none; background: #2c3e50; color: #fff; cursor: pointer; }
+    .msg { color: green; text-align: center; }
+    .err { color: red; text-align: center; }
+    </style>
+    </head><body>
+    <div class="container">
+        <h2>Login</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        <form method="post">
+            <input type="text" name="username" placeholder="Gebruikersnaam" required>
+            <input type="password" name="password" placeholder="Wachtwoord" required>
+            <input type="submit" value="Login">
+        </form>
+    </div>
+    </body></html>
+    """)
 
-@app.route('/2fa-setup', methods=['GET', 'POST'])
-def twofa_setup():
-    client_ip = get_client_ip()
-    # If IP is private, skip 2FA setup and log in directly
-    if is_private_ip(client_ip):
-        users = load_users()
-        username = session.get('pending_2fa_user')
-        if username and username in users:
-            user = users[username]
-            session.pop('pending_2fa_user', None)
-            session['username'] = username
-            session['role'] = user['role']
-            logging.info(f"User '{username}' logged in (LAN/no 2FA, skipped setup).")
-            flash("Ingelogd als %s (LAN, geen 2FA vereist)" % username, "msg")
-            return redirect(url_for('home'))
-        else:
-            flash("Geen gebruiker voor 2FA setup.", "err")
-            return redirect(url_for('login'))
-    users = load_users()
-    username = session.get('pending_2fa_user')
-    if not username or username not in users:
-        flash("Geen gebruiker voor 2FA setup.", "err")
-        return redirect(url_for('login'))
-    user = users[username]
-    secret = user.get("2fa_secret")
-    if not secret:
-        # Should not happen, but regenerate if missing
-        secret = pyotp.random_base32()
-        user["2fa_secret"] = secret
-        save_users(users)
-    totp = pyotp.TOTP(secret)
-    # Generate QR code for Google Authenticator
-    otp_uri = totp.provisioning_uri(name=username, issuer_name="Protect-LPR")
-    qr = qrcode.make(otp_uri)
-    buf = io.BytesIO()
-    qr.save(buf, format='PNG')
-    qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-    if request.method == 'POST':
-        otp_code = request.form.get('otp', '').strip()
-        if totp.verify(otp_code):
-            # 2FA setup complete, log in user
-            session.pop('pending_2fa_user', None)
-            session['username'] = username
-            session['role'] = user['role']
-            flash("2FA ingesteld en ingelogd.", "msg")
-            return redirect(url_for('home'))
-        else:
-            flash("Ongeldige 2FA code. Probeer opnieuw.", "err")
-    return render_template("2fa_setup.html", qr_b64=qr_b64, secret=secret, username=username)
+@app.route('/logout')
+def logout():
+    username = session.get('username')
+    session.clear()
+    logging.info(f"User '{username}' logged out.")
+    flash("Uitgelogd.", "msg")
+    return redirect(url_for('login'))
 
 @app.route('/users', methods=['GET', 'POST'])
 @login_required(role="admin")
@@ -1071,8 +950,7 @@ def home():
         events=final_events,
         searched=searched,
         session=session,
-        debug_info=debug_info,
-        current_app=current_app  # <-- add this line
+        debug_info=debug_info
     )
 
 @app.route('/media/<path:path>')
@@ -1100,6 +978,89 @@ def media_file(path):
         mimetype = 'video/webm'
     return send_file(abs_path, mimetype=mimetype)
 
+# Only allow admin to access config page
+@app.route('/config', methods=['GET', 'POST'])
+@login_required(role="admin")
+def config():
+    msg = None
+    err = None
+    if request.method == 'POST':
+        config_json = request.form.get('config_json', '')
+        try:
+            # Validate config_json is valid JSON and not too large
+            if len(config_json) > 100_000:
+                raise Exception("Config too large")
+            parsed = json.loads(config_json)
+            # Optionally, validate structure here
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(parsed, f, indent=2)
+            logging.info(f"Configuration updated by user '{session.get('username')}'.")
+            flash("Configuratie succesvol opgeslagen.", "msg")
+            return redirect(url_for('config'))
+        except Exception as e:
+            logging.error(f"Error saving configuration: {e}")
+            flash(f"Fout bij opslaan: {e}", "err")
+            # Show the submitted (possibly invalid) JSON again
+            return render_template_string(CONFIG_TEMPLATE, config_json=config_json)
+    else:
+        # Load current config
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                config_json = json.dumps(json.load(f), indent=2)
+        except Exception as e:
+            config_json = "{}"
+            logging.error(f"Error loading configuration: {e}")
+            flash(f"Fout bij laden van configuratie: {e}", "err")
+        return render_template_string(CONFIG_TEMPLATE, config_json=config_json)
+
+@app.route('/config/auto_save', methods=['POST'])
+@login_required(role="admin")
+def auto_save_config():
+    data = request.get_json(force=True)
+    try:
+        # Load config
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+        # Update config fields from posted data
+        config['paths']['log_dir'] = data.get('log_dir', config['paths'].get('log_dir', ''))
+        config['paths']['image_dir'] = data.get('image_dir', config['paths'].get('image_dir', ''))
+        config['sqlite3_db_file'] = data.get('sqlite3_db_file', config.get('sqlite3_db_file', ''))
+        config['users_file'] = data.get('users_file', config.get('users_file', ''))
+        # --- Handle ignored plates with comments ---
+        plates = data.get('ignored_plates', [])
+        comments = data.get('ignored_plates_comment', [])
+        if isinstance(plates, list) and isinstance(comments, list) and len(comments) == len(plates):
+            config['ignored_plates'] = [
+                {"plate": p.strip(), "comment": c.strip()}
+                for p, c in zip(plates, comments)
+                if p.strip()
+            ]
+        else:
+            config['ignored_plates'] = [
+                {"plate": p.strip(), "comment": ""}
+                for p in plates if p.strip()
+            ]
+        if 'web' not in config:
+            config['web'] = {}
+        config['web']['port'] = int(data.get('web_port', config['web'].get('port', 8082)))
+        # Backup video and window settings
+        if 'backup_original_video' in data:
+            config['backup_original_video'] = bool(data['backup_original_video']) if isinstance(data['backup_original_video'], bool) else str(data['backup_original_video']).lower() in ['true', '1', 'yes', 'on']
+        if 'video_window_start_seconds' in data:
+            config['video_window_start_seconds'] = int(data['video_window_start_seconds'])
+        if 'video_window_end_seconds' in data:
+            config['video_window_end_seconds'] = int(data['video_window_end_seconds'])
+        # Always update log level if present
+        if 'log_level' in data and data['log_level']:
+            if 'logging' not in config:
+                config['logging'] = {}
+            config['logging']['level'] = data['log_level']
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "msg": str(e)})
+
 # Add this filter to your Flask app to support the date formatting in the template
 def todatetime(value, fmt):
     from datetime import datetime
@@ -1121,24 +1082,6 @@ def utc_to_amsterdam(dt_str):
     return dt_str  # fallback
 
 app.jinja_env.filters['utc_to_amsterdam'] = utc_to_amsterdam
-
-@app.route('/logout')
-def logout():
-    username = session.get('username')
-    session.clear()
-    logging.info(f"User '{username}' logged out.")
-    flash("Uitgelogd.", "msg")
-    return redirect(url_for('login'))
-
-def get_ignored_plates():
-    # Always returns a set of normalized plate strings
-    with open(CONFIG_FILE, "r") as f:
-        config = json.load(f)
-    return set(
-        str(item["plate"]).lower().strip()
-        for item in config.get("ignored_plates", [])
-        if isinstance(item, dict) and "plate" in item and item["plate"]
-    )
 
 if __name__ == '__main__':
     # Use port from config if available, else default to 8082

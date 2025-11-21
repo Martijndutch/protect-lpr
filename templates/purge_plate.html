@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Purge Plate Data</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; background: #f7f7f7; }
+        .container { max-width: 500px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+        h1 { text-align: center; color: #c0392b; }
+        label { display: block; margin-top: 16px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; margin-top: 4px; }
+        button { margin-top: 18px; padding: 10px 24px; border-radius: 4px; border: none; background: #c0392b; color: #fff; font-size: 16px; cursor: pointer; }
+        .msg { color: green; text-align: center; margin-top: 16px; }
+        .err { color: red; text-align: center; margin-top: 16px; }
+        .info { color: #555; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Purge Plate Data</h1>
+        <form id="purge-form" autocomplete="off">
+            <label for="plate">Kenteken (license plate):</label>
+            <input type="text" id="plate" name="plate" required placeholder="Bijv. ABC123">
+            <button type="submit">Verwijder uit database & schijf</button>
+        </form>
+        <div id="result" class="info"></div>
+        <a href="/config">Terug naar configuratie</a>
+    </div>
+    <script>
+    document.getElementById('purge-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var plate = document.getElementById('plate').value.trim();
+        if (!plate) return;
+        if (!confirm('Weet je zeker dat je alle events en beelden voor kenteken "' + plate + '" wilt verwijderen?')) return;
+        var resultDiv = document.getElementById('result');
+        resultDiv.textContent = 'Bezig met verwijderen...';
+        fetch('/config/purge_plate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plate })
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            if (data.success) {
+                resultDiv.className = 'msg';
+                resultDiv.textContent = 'Alle events en beelden voor kenteken ' + plate + ' zijn verwijderd.';
+            } else {
+                resultDiv.className = 'err';
+                resultDiv.textContent = 'Fout: ' + (data.msg || 'Onbekend');
+            }
+        })
+        .catch(() => {
+            resultDiv.className = 'err';
+            resultDiv.textContent = 'Fout bij verwijderen.';
+        });
+    });
+    </script>
+</body>
+</html>

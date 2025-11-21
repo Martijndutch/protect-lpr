@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>2FA Instellen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body { font-family: Arial, sans-serif; background: #f7f7f7; }
+.container { max-width: 400px; margin: 60px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 32px; }
+h2 { text-align: center; }
+input[type="number"] { width: 100%; padding: 8px; margin-bottom: 12px; border-radius: 4px; border: 1px solid #ccc; }
+input[type="submit"] { width: 100%; padding: 8px; border-radius: 4px; border: none; background: #2c3e50; color: #fff; cursor: pointer; }
+.msg { color: green; text-align: center; }
+.err { color: red; text-align: center; }
+.qr { display: block; margin: 0 auto 16px auto; }
+.secret { text-align: center; font-size: 15px; color: #333; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h2>2FA Instellen</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <div class="secret">
+        Scan deze QR code met uw authenticator app (bijv. Google Authenticator) of voer de geheime sleutel handmatig in:<br>
+        <b>{{ secret }}</b>
+    </div>
+    <img class="qr" src="data:image/png;base64,{{ qr_b64 }}" alt="2FA QR code" width="200" height="200">
+    <form method="post">
+        <input type="number" name="otp" placeholder="Voer 2FA code in" required autocomplete="one-time-code">
+        <input type="submit" value="Bevestigen">
+    </form>
+</div>
+</body>
+</html>

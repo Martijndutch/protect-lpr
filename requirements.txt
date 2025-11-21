@@ -1,0 +1,7 @@
+flask
+werkzeug
+python-dotenv>=1.0.0
+schedule>=1.2.0
+tenacity>=8.2.0
+pillow
+pytz

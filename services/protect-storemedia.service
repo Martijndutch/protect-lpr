@@ -1,0 +1,17 @@
+[Unit]
+Description=Unifi Protect LPR Python Script
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/protect-lpr/venv/bin/python /opt/protect-lpr/protectStoremedia.py
+WorkingDirectory=/opt/protect-lpr
+Restart=always
+User=martijn
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/opt/protect-lpr/venv/bin:/usr/local/bin:/usr/bin:/bin"
+StandardOutput=append:/var/log/protect-lpr/protect-storemedia.log
+StandardError=append:/var/log/protect-lpr/protect-storemedia.log
+
+[Install]
+WantedBy=multi-user.target	

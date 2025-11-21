@@ -1,10 +1,22 @@
 {
   "admin": {
     "password": "scrypt:32768:8:1$STezswiVvRP3Np5K$e5d558e074349b86bd9b4e7353635abe655c94c5cd382c083263f24ba04b6a9542172a185a631074c02d549b8cbba785f510ddc3821eb17c21e8d73794b3870a",
-    "role": "admin"
+    "role": "admin",
+    "2fa_secret": "K2DZYYJ2EQPUKWE4JRH53JVDMMWM2HP5"
   },
   "test": {
     "password": "scrypt:32768:8:1$r9zBhR3eeV74TmRU$63d2d5db6623f5c6f00325503d472d12a08a5e3b029a92a082d414b6a68254503e167653d2a7b53608b00ba39eaabc8a9d1e5f8a2afeea18110f181a47566ddc",
-    "role": "readonly"
+    "role": "readonly",
+    "2fa_secret": null
+  },
+  "kars": {
+    "password": "scrypt:32768:8:1$NDt2rlAT844jta7V$fef77dbb6d6bb53fccd7f9b04371db15d3212e8065627f6a2f97a8b19876c5ca03addba9f5b3d4f53dc3cec3a51cc74cddc8786d948fdb01a85fe17b586f961d",
+    "role": "admin",
+    "2fa_secret": null
+  },
+  "piet": {
+    "password": "scrypt:32768:8:1$jJcsuYRQq0Oxtdoi$e6a28e7a1ead73fbf229b3a3a09e69a78f68297dfe278359d931b7f95908d70a0ea16e24d0a014198b669b9aa3dbc57bd806de980f5c8864d5949e670ccc40af",
+    "role": "readonly",
+    "2fa_secret": null
   }
 }

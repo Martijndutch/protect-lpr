@@ -20,6 +20,9 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align:right;">
+            <a href="{{ url_for('config_bp.config_page') }}">Terug naar configuratie</a>
+        </div>
         <h2>GebruikersbeheeR</h2>
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
@@ -35,29 +38,103 @@
                 <td>{{ uname }}</td>
                 <td>{{ u['role'] }}</td>
                 <td>
-                    {% if uname != 'admin' %}
-                    <form method="post" style="display:inline;">
-                        <input type="hidden" name="username" value="{{ uname }}">
-                        <input type="hidden" name="action" value="delete">
-                        <input type="submit" value="Verwijder">
-                    </form>
-                    {% endif %}
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        {% if uname != 'admin' %}
+                        <form method="post" style="display:inline;">
+                            <input type="hidden" name="username" value="{{ uname }}">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="submit" value="Verwijder">
+                        </form>
+                        {% endif %}
+                        <button type="button" class="reset-btn" onclick="showResetPw(this)">Reset wachtwoord</button>
+                        <form method="post" class="resetpw-form" style="display:none; margin-left:0;">
+                            <input type="hidden" name="username" value="{{ uname }}">
+                            <input type="hidden" name="action" value="resetpw">
+                            <input type="password" name="new_password" placeholder="Nieuw wachtwoord" required style="width:120px;">
+                            <input type="submit" value="Opslaan">
+                            <button type="button" onclick="hideResetPw(this)" style="background:#c0392b;">Annuleer</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             {% endfor %}
         </table>
         <h3>Nieuwe gebruiker toevoegen</h3>
-        <form method="post">
+        <form method="post" style="margin-top:16px;" id="add-user-form" autocomplete="off">
             <input type="hidden" name="action" value="add">
             <input type="text" name="username" placeholder="Gebruikersnaam" required>
-            <input type="password" name="password" placeholder="Wachtwoord" required>
+            <input type="password" name="password" placeholder="Wachtwoord" required id="add-password" onfocus="showPwReq()" onblur="hidePwReq()">
+            <span id="pw-req" style="display:none; color:#444; background:#fffbe6; border:1px solid #e1c97a; border-radius:4px; padding:8px; margin-top:4px; font-size:13px;">
+                Wachtwoord vereisten:<br>
+                • Minimaal 8 tekens<br>
+                • Minimaal 1 hoofdletter<br>
+                • Minimaal 1 kleine letter<br>
+                • Minimaal 1 cijfer<br>
+                • Minimaal 1 speciaal teken (!@#$%^&* etc.)
+            </span>
             <select name="role">
                 <option value="readonly">Alleen lezen</option>
                 <option value="admin">Admin</option>
             </select>
             <input type="submit" value="Toevoegen">
         </form>
-        <a href="{{ url_for('config_bp.config_page') }}">Terug naar configuratie</a>
     </div>
+    <script>
+        function showResetPw(btn) {
+            // Hide all open reset forms
+            document.querySelectorAll('.resetpw-form').forEach(f => f.style.display = 'none');
+            // Show the next sibling form
+            var form = btn.parentNode.querySelector('.resetpw-form');
+            if(form) form.style.display = 'inline-flex';
+            btn.style.display = 'none';
+        }
+        function hideResetPw(btn) {
+            var form = btn.closest('.resetpw-form');
+            if(form) form.style.display = 'none';
+            // Show the reset button again
+            var parent = form.parentNode;
+            var resetBtn = parent.querySelector('.reset-btn');
+            if(resetBtn) resetBtn.style.display = '';
+        }
+        function showPwReq() {
+            document.getElementById('pw-req').style.display = 'block';
+        }
+        function hidePwReq() {
+            document.getElementById('pw-req').style.display = 'none';
+        }
+        // Password validation for add user
+        document.getElementById('add-user-form').addEventListener('submit', function(e) {
+            var pw = document.getElementById('add-password').value;
+            var reqs = passwordRequirements(pw);
+            if (reqs.length > 0) {
+                alert("Wachtwoord voldoet niet aan de vereisten:\n- " + reqs.join("\n- "));
+                e.preventDefault();
+            }
+        });
+        // Password validation for reset forms
+        document.querySelectorAll('.resetpw-form').forEach(function(form) {
+            form.addEventListener('submit', function(e) {
+                var pw = form.querySelector('input[name="new_password"]').value;
+                var reqs = passwordRequirements(pw);
+                if (reqs.length > 0) {
+                    alert("Wachtwoord voldoet niet aan de vereisten:\n- " + reqs.join("\n- "));
+                    e.preventDefault();
+                }
+            });
+        });
+        function validatePassword(pw) {
+            // At least 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char
+            return passwordRequirements(pw).length === 0;
+        }
+        function passwordRequirements(pw) {
+            var reqs = [];
+            if (pw.length < 8) reqs.push("Minimaal 8 tekens");
+            if (!/[A-Z]/.test(pw)) reqs.push("Minimaal 1 hoofdletter");
+            if (!/[a-z]/.test(pw)) reqs.push("Minimaal 1 kleine letter");
+            if (!/\d/.test(pw)) reqs.push("Minimaal 1 cijfer");
+            if (!/[^A-Za-z0-9]/.test(pw)) reqs.push("Minimaal 1 speciaal teken (!@#$%^&* etc.)");
+            return reqs;
+        }
+    </script>
 </body>
 </html>

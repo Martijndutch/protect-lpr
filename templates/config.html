@@ -29,44 +29,139 @@
         .del-btn { background: #c0392b; }
     </style>
     <script>
-        function addDeviceRow() {
-            const table = document.getElementById('rtsp_devices');
-            const existingDevices = {{ config['rtsp_streams']|length }};
-            const newIndex = table.rows.length - 1 + existingDevices;
-            const row = table.insertRow(-1);
-            row.innerHTML = `
-                <td><input type="text" name="device_ids" placeholder="Device ID"></td>
-                <td colspan="8">
-                    <table class="rtsp-table" style="margin:0;">
-                        <tbody id="streams_${newIndex}">
-                            <!-- Stream rows will be added here -->
-                        </tbody>
-                    </table>
-                    <button type="button" class="add-btn" onclick="addStreamRow('streams_${newIndex}')">+ Stream</button>
-                </td>
-                <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
-            `;
+    // Escape HTML for safe value insertion
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+    }
+
+    function addPlateRow() {
+        var input = document.getElementById('new-plate-input');
+        var commentInput = document.getElementById('new-plate-comment');
+        var plate = input.value.trim();
+        var comment = commentInput.value.trim();
+        if (!plate) return;
+        // Check if already exists
+        var exists = false;
+        document.querySelectorAll('input[name="ignored_plates[]"]')
+            .forEach(function(el) { if (el.value.trim() === plate) exists = true; });
+        if (exists) return;
+        var row = document.createElement('div');
+        row.className = 'ignored-plate-row';
+        row.style = 'display: flex; align-items: center; gap: 8px;';
+        row.innerHTML = `
+            <input type="text" name="ignored_plates[]" value="${escapeHtml(plate)}" style="flex:1;">
+            <input type="text" name="ignored_plates_comment[]" value="${escapeHtml(comment)}" placeholder="Opmerking" style="flex:1;">
+            <span class="event-count" style="color:#888; font-size:13px; min-width:80px;">Events: ...</span>
+            <button type="button" class="del-btn" onclick="removePlateRow(this)">Verwijder</button>
+        `;
+        document.getElementById('ignored-plates-list').appendChild(row);
+        input.value = '';
+        commentInput.value = '';
+        // --- IMPORTANT: Wait for DOM update before autosave ---
+        setTimeout(function() {
+            // Collect form data for debug
+            var form = document.getElementById('config-form');
+            var formData = new FormData(form);
+            var debugData = {};
+            formData.forEach(function(value, key) {
+                if (key.endsWith('[]')) {
+                    var k = key.slice(0, -2);
+                    if (!debugData[k]) debugData[k] = [];
+                    debugData[k].push(value);
+                } else {
+                    debugData[key] = value;
+                }
+            });
+            // Print debug info to the screen
+            var debugDiv = document.getElementById('debug-postdata');
+            if (!debugDiv) {
+                debugDiv = document.createElement('pre');
+                debugDiv.id = 'debug-postdata';
+                debugDiv.style = 'background:#ffeeba;color:#222;padding:8px 12px;margin:10px 0 20px 0;border-radius:6px;border:1px solid #ffeeba;max-width:100%;overflow-x:auto;';
+                document.querySelector('.container').prepend(debugDiv);
+            }
+            debugDiv.textContent = 'POST data:\n' + JSON.stringify(debugData, null, 2);
+            autoSaveConfig();
+        }, 50);
+        // Fetch event count for this plate
+        fetch('/config/event_count?plate=' + encodeURIComponent(plate))
+            .then(resp => {
+                if (!resp.ok) throw new Error('Network response was not ok');
+                return resp.json();
+            })
+            .then(data => {
+                var count = (data && typeof data.count === 'number') ? data.count : 0;
+                row.querySelector('.event-count').innerText = 'Events: ' + count;
+            })
+            .catch(() => {
+                row.querySelector('.event-count').innerText = 'Events: ?';
+            });
+    }
+
+    function removePlateRow(btn) {
+        var row = btn.closest('.ignored-plate-row');
+        if (row) row.remove();
+        autoSaveConfig();
+    }
+
+    function autoSaveConfig() {
+        var form = document.getElementById('config-form');
+        var formData = new FormData(form);
+        var data = {};
+        formData.forEach(function(value, key) {
+            if (key.endsWith('[]')) {
+                var k = key.slice(0, -2);
+                if (!data[k]) data[k] = [];
+                data[k].push(value);
+            } else {
+                data[key] = value;
+            }
+        });
+        // Explicitly add log_level from the dropdown (in case browser doesn't include it)
+        var logLevelSelect = document.getElementById('log_level');
+        if (logLevelSelect) {
+            data['log_level'] = logLevelSelect.value;
         }
-        function addStreamRow(tbodyId) {
-            const tbody = document.getElementById(tbodyId);
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td><input type="text" name="stream_names_${tbodyId}[]" placeholder="Naam" required></td>
-                <td><input type="text" name="stream_urls_${tbodyId}[]" placeholder="RTSP URL" pattern="rtsp://.*" required></td>
-                <td><input type="number" name="initial_delay_ms_${tbodyId}[]" value="100" min="0" required></td>
-                <td><input type="number" name="interval_ms_${tbodyId}[]" value="200" min="0" required></td>
-                <td><input type="number" name="num_images_${tbodyId}[]" value="2" min="1" required></td>
-                <td><input type="number" name="video_duration_s_${tbodyId}[]" value="0" min="0" required></td>
-                <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
-            `;
-            tbody.appendChild(row);
-        }
+        fetch('/config/auto_save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(data)
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            if (data.success) {
+                showTempMsg('Configuratie opgeslagen', 'msg');
+            } else {
+                showTempMsg('Fout bij opslaan: ' + (data.msg || 'Onbekend'), 'err');
+            }
+        })
+        .catch(() => {
+            showTempMsg('Fout bij opslaan van configuratie', 'err');
+        });
+    }
+
+    function showTempMsg(msg, cls) {
+        var div = document.createElement('div');
+        div.className = cls;
+        div.innerText = msg;
+        document.querySelector('.container').prepend(div);
+        setTimeout(() => { div.remove(); }, 2000);
+    }
     </script>
 </head>
 <body>
     <div class="container">
+        <div style="text-align:right;">
+            <a href="/">Terug naar overzicht</a>
+            |
+            <a href="/config/users">Gebruikersbeheer</a>
+        </div>
         <h1>Configuratie aanpassen</h1>
-        <div style="text-align:right;"><a href="{{ url_for('config_bp.users_page') }}">Gebruikersbeheer</a></div>
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
@@ -74,99 +169,165 @@
             {% endfor %}
           {% endif %}
         {% endwith %}
-        <form method="post">
+        <form method="post" id="config-form">
             <div class="section">
                 <label>Log directory</label>
                 <input type="text" name="log_dir" value="{{ config['paths']['log_dir'] }}">
-                <label>Log file</label>
-                <input type="text" name="log_file" value="{{ config['paths']['log_file'] }}">
                 <label>Image directory</label>
                 <input type="text" name="image_dir" value="{{ config['paths']['image_dir'] }}">
-                <label>Unknown directory</label>
-                <input type="text" name="unknown_dir" value="{{ config['paths']['unknown_dir'] }}">
             </div>
             <div class="section">
-                <label>Logging level</label>
-                <input type="text" name="log_level" value="{{ config['logging']['level'] }}">
-                <label>Logging format</label>
-                <input type="text" name="log_format" value="{{ config['logging']['format'] }}">
-            </div>
-            <div class="section">
-                <label>Server port</label>
-                <input type="number" name="server_port" value="{{ config['server']['port'] }}">
-                <label>Max concurrent ffmpeg</label>
-                <input type="number" name="max_concurrent_ffmpeg" value="{{ config['server']['max_concurrent_ffmpeg'] }}">
-            </div>
-            <div class="section">
-                <label>MySQL DB file</label>
-                <input type="text" name="mysql_db_file" value="{{ config['mysql_db_file'] }}">
+                <label>Sqlite3 DB file</label>
+                <input type="text" name="sqlite3_db_file" value="{{ config['sqlite3_db_file'] if config.get('sqlite3_db_file') else config['paths']['mysql_db_file'] }}">
+                <label>Users file</label>
+                <input type="text" name="users_file" value="{{ config['users_file'] }}">
             </div>
             <div class="section">
                 <label>Genegeerde kentekens (Ignored plates)</label>
-                <div id="ignored_plates_list" class="inline-list">
-                    {% for plate in config['ignored_plates'] %}
-                        <input type="text" name="ignored_plates" value="{{ plate }}">
+                <div id="ignored-plates-list" class="inline-list" style="flex-direction: column; gap: 6px;">
+                    {% for plate_obj in normalized_plates %}
+                    <div class="ignored-plate-row" style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" name="ignored_plates[]" value="{{ plate_obj.plate }}" style="flex:1;">
+                        <input type="text" name="ignored_plates_comment[]" value="{{ plate_obj.comment }}" placeholder="Opmerking" style="flex:1;">
+                        <span class="event-count" style="color:#888; font-size:13px; min-width:80px;">
+                            <a href="/config/purge_plate/{{ plate_obj.plate }}">Events</a>: {{ plate_event_counts.get(plate_obj.plate, 0) }}
+                        </span>
+                        <button type="button" class="del-btn" onclick="removePlateRow(this)">Verwijder</button>
+                    </div>
                     {% endfor %}
-                    <input type="text" name="ignored_plates" placeholder="Kenteken">
                 </div>
-                <button type="button" onclick="document.getElementById('ignored_plates_list').appendChild(document.createElement('input')).setAttribute('name','ignored_plates')">Voeg toe</button>
+                <div style="margin-top:8px;">
+                    <input type="text" id="new-plate-input" placeholder="Nieuw kenteken" style="width:200px;">
+                    <input type="text" id="new-plate-comment" placeholder="Opmerking" style="width:200px;">
+                    <button type="button" class="add-btn" onclick="addPlateRow()">Voeg toe</button>
+                </div>
             </div>
             <div class="section">
-                <label>RTSP streams per device</label>
-                <table class="rtsp-table" id="rtsp_devices">
-                    <thead>
-                        <tr>
-                            <th style="width:120px;">Device ID</th>
-                            <th>Streams</th>
-                            <th style="width:80px;">Actie</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for device_id, streams in config['rtsp_streams'].items() %}
-                        {% set device_index = loop.index %}
-                        <tr>
-                            <td>
-                                <input type="text" name="device_ids" value="{{ device_id }}">
-                            </td>
-                            <td>
-                                <table class="rtsp-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Naam</th>
-                                            <th>RTSP URL</th>
-                                            <th>Initial delay (ms)</th>
-                                            <th>Interval (ms)</th>
-                                            <th># Images</th>
-                                            <th>Video duration (s)</th>
-                                            <th>Actie</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="streams_{{ device_index }}">
-                                        {% for stream in streams %}
-                                        <tr>
-                                            <td><input type="text" name="stream_names_streams_{{ device_index }}[]" value="{{ stream['name'] }}"></td>
-                                            <td><input type="text" name="stream_urls_streams_{{ device_index }}[]" value="{{ stream['url'] }}"></td>
-                                            <td><input type="number" name="initial_delay_ms_streams_{{ device_index }}[]" value="{{ stream['initial_delay_ms'] }}"></td>
-                                            <td><input type="number" name="interval_ms_streams_{{ device_index }}[]" value="{{ stream['interval_ms'] }}"></td>
-                                            <td><input type="number" name="num_images_streams_{{ device_index }}[]" value="{{ stream['num_images'] }}"></td>
-                                            <td><input type="number" name="video_duration_s_streams_{{ device_index }}[]" value="{{ stream['video_duration_s'] }}"></td>
-                                            <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                                <button type="button" class="add-btn" onclick="addStreamRow('streams_{{ device_index }}')">+ Stream</button>
-                            </td>
-                            <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">Verwijder</button></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                <button type="button" class="add-btn" onclick="addDeviceRow()">+ Device</button>
+                <label>Webserver instellingen</label>
+                <label>Port</label>
+                <input type="number" name="web_port" value="{{ config['web']['port'] if config.get('web') and config['web'].get('port') else 8082 }}">
+            </div>
+            <div class="section">
+                <label for="log_level">Log level</label>
+                <select name="log_level" id="log_level" onchange="autoSaveConfig()">
+                    {% set log_level = config['logging']['level'] if config.get('logging') and config['logging'].get('level') else 'INFO' %}
+                    <option value="DEBUG" {% if log_level == 'DEBUG' %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if log_level == 'INFO' %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if log_level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if log_level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                    <option value="CRITICAL" {% if log_level == 'CRITICAL' %}selected{% endif %}>CRITICAL</option>
+                </select>
+            </div>
+            <!-- Video Backup Configuration Section -->
+            <div class="section">
+                <label>Video Backup Instellingen</label>
+                <div class="form-group">
+                    <label for="backup_original_video">
+                        <input type="checkbox" id="backup_original_video" name="backup_original_video"
+                            {% if config.get('backup_original_video', False) %}checked{% endif %}>
+                        Backup originele video
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label for="video_window_start_seconds">Video window start (seconden):</label>
+                    <input type="number" id="video_window_start_seconds" name="video_window_start_seconds"
+                        value="{{ config.get('video_window_start_seconds', -15) }}">
+                </div>
+                <div class="form-group">
+                    <label for="video_window_end_seconds">Video window einde (seconden):</label>
+                    <input type="number" id="video_window_end_seconds" name="video_window_end_seconds"
+                        value="{{ config.get('video_window_end_seconds', 20) }}">
+                </div>
             </div>
             <input type="submit" value="Opslaan">
         </form>
-        <a href="/">Terug naar overzicht</a>
     </div>
+    <script>
+        function addPlateRow() {
+            var input = document.getElementById('new-plate-input');
+            var commentInput = document.getElementById('new-plate-comment');
+            var plate = input.value.trim();
+            var comment = commentInput.value.trim();
+            if (!plate) return;
+            // Check if already exists
+            var exists = false;
+            document.querySelectorAll('input[name="ignored_plates[]"]')
+                .forEach(function(el) { if (el.value.trim() === plate) exists = true; });
+            if (exists) return;
+            var row = document.createElement('div');
+            row.className = 'ignored-plate-row';
+            row.style = 'display: flex; align-items: center; gap: 8px;';
+            // Default to 0, will update after AJAX
+            row.innerHTML = `
+                <input type="text" name="ignored_plates[]" value="${plate}" style="flex:1;">
+                <input type="text" name="ignored_plates_comment[]" placeholder="Opmerking" style="flex:1;">
+                <span class="event-count" style="color:#888; font-size:13px; min-width:80px;">Events: ...</span>
+                <button type="button" class="del-btn" onclick="removePlateRow(this)">Verwijder</button>
+            `;
+            document.getElementById('ignored-plates-list').appendChild(row);
+            input.value = '';
+            commentInput.value = '';
+            // Fetch event count for this plate
+            fetch('/config/event_count?plate=' + encodeURIComponent(plate))
+                .then(resp => resp.json())
+                .then(data => {
+                    var count = (data && typeof data.count === 'number') ? data.count : 0;
+                    row.querySelector('.event-count').innerText = 'Events: ' + count;
+                })
+                .catch(() => {
+                    row.querySelector('.event-count').innerText = 'Events: ?';
+                });
+            // --- AUTO-SAVE CONFIG ---
+            autoSaveConfig();
+        }
+        function removePlateRow(btn) {
+            var row = btn.closest('.ignored-plate-row');
+            if (row) row.remove();
+            autoSaveConfig(); // Save config after removing a plate
+        }
+        function autoSaveConfig() {
+            var form = document.getElementById('config-form');
+            var formData = new FormData(form);
+            var data = {};
+            formData.forEach(function(value, key) {
+                if (key.endsWith('[]')) {
+                    var k = key.slice(0, -2);
+                    if (!data[k]) data[k] = [];
+                    data[k].push(value);
+                } else {
+                    data[key] = value;
+                }
+            });
+            // Explicitly add log_level from the dropdown (in case browser doesn't include it)
+            var logLevelSelect = document.getElementById('log_level');
+            if (logLevelSelect) {
+                data['log_level'] = logLevelSelect.value;
+            }
+            fetch('/config/auto_save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify(data)
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.success) {
+                    // Optionally show a small success message
+                    showTempMsg('Configuratie opgeslagen', 'msg');
+                } else {
+                    showTempMsg('Fout bij opslaan: ' + (data.msg || 'Onbekend'), 'err');
+                }
+            })
+            .catch(() => {
+                showTempMsg('Fout bij opslaan van configuratie', 'err');
+            });
+        }
+        function showTempMsg(msg, cls) {
+            var div = document.createElement('div');
+            div.className = cls;
+            div.innerText = msg;
+            document.querySelector('.container').prepend(div);
+            setTimeout(() => { div.remove(); }, 2000);
+        }
+    </script>
 </body>
 </html>

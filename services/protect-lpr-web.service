@@ -1,0 +1,13 @@
+[Unit]
+Description=Gunicorn instance for Protect LPR Web (web.py)
+After=network.target
+
+[Service]
+User=martijn
+Group=www-data
+WorkingDirectory=/opt/protect-lpr
+Environment="PATH=/opt/protect-lpr/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/protect-lpr/venv/bin/gunicorn --workers 3 --bind 0.0.0.0:8082 web:app
+
+[Install]
+WantedBy=multi-user.target
