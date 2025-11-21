@@ -12,50 +12,17 @@
     "format": "%(asctime)s - %(levelname)s - %(message)s"
   },
   "server": {
-    "address": "10.151.101.1",
+    "address": "YOUR_UNIFI_PROTECT_IP",
     "port": 443,
-    "username": "localtest",
-    "password": "100%wifi100%WIFI",
+    "username": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
     "max_concurrent_ffmpeg": 4,
     "webhook_port": 1025
   },
-  "ignored_plates": [
-    {
-      "plate": "rrr",
-      "comment": ""
-    },
-    {
-      "plate": "123",
-      "comment": ""
-    },
-    {
-      "plate": "gfhgfdh",
-      "comment": ""
-    },
-    {
-      "plate": "fghfdg",
-      "comment": ""
-    },
-    {
-      "plate": "fhjgfd",
-      "comment": "gfhjfgh"
-    },
-    {
-      "plate": "fdgdfsgd",
-      "comment": "6666"
-    },
-    {
-      "plate": "555",
-      "comment": "hgjgfjfg"
-    },
-    {
-      "plate": "fdgsdfg",
-      "comment": ""
-    }
-  ],
+  "ignored_plates": [],
   "users_file": "/opt/protect-lpr/users.json",
   "retention_days": 7,
-  "camera_ids": "682dea0501de5d03e414db42,67486459015fd703e4004f5e",
+  "camera_ids": "YOUR_CAMERA_ID_1,YOUR_CAMERA_ID_2",
   "age_seconds": 20,
   "video_window_start_seconds": -15,
   "video_window_end_seconds": 20,
